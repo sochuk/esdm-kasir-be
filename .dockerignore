@@ -1,0 +1,9 @@
+node_modules
+*.log
+.env
+.git
+backup_local.sql
+verify_remote.cjs
+Brebet456.pem
+*.xls
+*.xlsx
