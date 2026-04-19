@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import pg from 'pg';
 
 async function fixAdmin() {
-    const hash = await bcrypt.hash('admin123', 10);
+    const hash = await bcrypt.hash('admin456', 10);
     const client = new pg.Client({
         host: 'localhost', 
         port: 5432, 

@@ -1,19 +1,14 @@
 import { pool } from '../config/db.config.js';
 
 export const lookupMember = async (req, res) => {
-    let { qr } = req.query; // we expect 'qr' to hold the no_anggota or username or JSON string
+    let { qr } = req.query;
     if (!qr) return res.status(400).json({ message: 'QR Code atau ID Anggota diperlukan' });
 
     try {
-        // Handle scenario where QR is a JSON string emitted by scanner
         try {
             const parsed = JSON.parse(qr);
-            if (parsed.no_anggota) {
-                qr = parsed.no_anggota.toString();
-            }
-        } catch(e) {
-            // Not a JSON string, treat as raw ID
-        }
+            if (parsed.no_anggota) qr = parsed.no_anggota.toString();
+        } catch(e) {}
 
         const result = await pool.query(
             `SELECT a.id, a.username, p.nama, p.no_anggota, p.unit, p.points, p.no_handphone 
@@ -43,25 +38,22 @@ export const checkoutTransaction = async (req, res) => {
     const client = await pool.connect();
     
     try {
-        await client.query('BEGIN'); // Start Transaction
+        await client.query('BEGIN');
 
-        // Generate Invoice Number (e.g., INV-1712312312)
         const invoice_number = `INV-${Date.now()}`;
 
-        // 1. Insert Transaction Header
         const txRes = await client.query(
             `INSERT INTO transaction (
                 invoice_number, id_user_account, subtotal, discount, tax, total, 
                 points_earned, points_used, payment_method, created_by
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
-            [invoice_number, member_id || null, subtotal, discount, tax, total, points_earned, points_used, payment_method, 'kasir']
+            [invoice_number, member_id || null, subtotal, discount, tax, total, points_earned, 0, payment_method, 'kasir']
         );
         const transaction_id = txRes.rows[0].id;
 
-        // 2. Insert Items & Decrement Stock
+        // Poin 6: Simpan buy_price, is_consignment, consignment_percentage ke transaction_item
         for (const item of items) {
-            // Check stock first
-            const stockCheck = await client.query('SELECT stock FROM product WHERE id = $1', [item.id]);
+            const stockCheck = await client.query('SELECT stock, buy_price, is_consignment, consignment_percentage FROM product WHERE id = $1', [item.id]);
             if (stockCheck.rows.length === 0) {
                 throw new Error(`Produk dengan ID ${item.id} tidak ditemukan`);
             }
@@ -69,34 +61,37 @@ export const checkoutTransaction = async (req, res) => {
                 throw new Error(`Stok produk ${item.name} tidak mencukupi (Sisa: ${stockCheck.rows[0].stock})`);
             }
 
-            // Insert details
+            const prod = stockCheck.rows[0];
+
             await client.query(
                 `INSERT INTO transaction_item (
-                    transaction_id, product_id, product_sku, product_name, quantity, price, subtotal
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [transaction_id, item.id, item.sku, item.name, item.qty, item.price, item.qty * item.price]
+                    transaction_id, product_id, product_sku, product_name, quantity, price, subtotal,
+                    buy_price, is_consignment, consignment_percentage
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                [
+                    transaction_id, item.id, item.sku, item.name, item.qty, item.price, item.qty * item.price,
+                    prod.buy_price || 0,
+                    prod.is_consignment || false,
+                    prod.consignment_percentage || 0
+                ]
             );
 
-            // Decrement Stock
             await client.query('UPDATE product SET stock = stock - $1 WHERE id = $2', [item.qty, item.id]);
         }
 
-        // 3. Update Member Points
+        // Update poin member (hanya earned, points_used selalu 0 karena fitur disembunyikan)
         if (member_id) {
-            // decrease used points, increase earned points
             await client.query(
-                `UPDATE user_profile 
-                 SET points = points - $1 + $2 
-                 WHERE id_user_account = $3`,
-                [points_used || 0, points_earned || 0, member_id]
+                `UPDATE user_profile SET points = points + $1 WHERE id_user_account = $2`,
+                [points_earned || 0, member_id]
             );
         }
 
-        await client.query('COMMIT'); // Commit Transaction
+        await client.query('COMMIT');
         res.status(201).json({ message: 'Transaksi berhasil', invoice_number, transaction_id });
 
     } catch (error) {
-        await client.query('ROLLBACK'); // Rollback on error
+        await client.query('ROLLBACK');
         console.error('Error during checkout transaction:', error);
         res.status(500).json({ message: error.message || 'Gagal memproses transaksi' });
     } finally {
@@ -104,22 +99,27 @@ export const checkoutTransaction = async (req, res) => {
     }
 };
 
-// =====================================
-// NEW: TRANSACTION HISTORY & RECEIPT
-// =====================================
-
 export const getTransactions = async (req, res) => {
     try {
-        const query = `
+        const { start_date, end_date } = req.query;
+        
+        let query = `
             SELECT t.id, t.invoice_number, t.created_date, t.total, t.payment_method, t.created_by,
                    u.nama as member_name
             FROM transaction t
             LEFT JOIN user_account ua ON t.id_user_account = ua.id
             LEFT JOIN user_profile u ON ua.id = u.id_user_account
-            ORDER BY t.created_date DESC
-            LIMIT 100
         `;
-        const result = await pool.query(query);
+        const params = [];
+        
+        if (start_date && end_date) {
+            query += ` WHERE t.created_date::date >= $1 AND t.created_date::date <= $2`;
+            params.push(start_date, end_date);
+        }
+        
+        query += ` ORDER BY t.created_date DESC LIMIT 500`;
+        
+        const result = await pool.query(query, params);
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error fetching transactions:', error);
@@ -144,7 +144,7 @@ export const getTransactionReceipt = async (req, res) => {
         }
 
         const itemsQuery = `
-            SELECT product_name, quantity, price, subtotal
+            SELECT product_name, quantity, price, subtotal, buy_price, is_consignment, consignment_percentage
             FROM transaction_item
             WHERE transaction_id = $1
             ORDER BY id ASC
