@@ -6,7 +6,7 @@ export const getAllProducts = async (req, res) => {
             SELECT p.*, c.name as category 
             FROM product p 
             LEFT JOIN category c ON p.category_id = c.id 
-            ORDER BY p.created_date DESC
+            ORDER BY p.name ASC
         `);
         res.status(200).json(result.rows);
     } catch (error) {
