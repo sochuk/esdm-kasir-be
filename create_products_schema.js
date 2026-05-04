@@ -17,7 +17,7 @@ async function createProducts() {
         await client.query(`
             CREATE TABLE IF NOT EXISTS product (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                sku VARCHAR(100) UNIQUE NOT NULL,
+                sku VARCHAR(100),
                 name VARCHAR(255) NOT NULL,
                 category_id UUID REFERENCES category(id) ON DELETE SET NULL,
                 price NUMERIC(15,2) DEFAULT 0,
@@ -72,8 +72,7 @@ async function createProducts() {
              const categoryId = categoryMap[item.category] || lainLainId;
              await client.query(
                 `INSERT INTO product (sku, name, category_id, price, stock, image_url) 
-                 VALUES ($1, $2, $3, $4, $5, $6)
-                 ON CONFLICT (sku) DO NOTHING`,
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
                 [item.sku, item.name, categoryId, item.price, item.stock, item.image_url]
              );
         }

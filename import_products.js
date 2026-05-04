@@ -11,7 +11,7 @@ const importProducts = async () => {
     console.log("🚀 Memulai proses cleansing & re-import data produk...");
 
     // 1. Baca Excel — ambil semua sheet
-    const filePath = path.resolve('..', 'Rincian Harga Beli Barang Bulan April 2026.xlsx');
+    const filePath = path.resolve('..', 'harga_barang.xlsx');
     let workbook;
     try {
         workbook = xlsx.readFile(filePath);
@@ -31,17 +31,18 @@ const importProducts = async () => {
         const data = xlsx.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
         let sheetCount = 0;
-        for (let i = 6; i < data.length; i++) {
+        for (let i = 5; i < data.length; i++) {
             const row = data[i];
-            const nama      = String(row[1] || '').trim();
-            const jumlah    = parseInt(row[2], 10);
-            const hargaBeli = parseFloat(row[3]); // Harga Satuan → buy_price
-            const hargaJual = parseFloat(row[5]); // Harga Jual +10% → price
+            const nama = String(row[0] || '').trim();
+            const sku = String(row[1] || 0);
+            const jumlah = parseInt(row[4]);
+            const hargaBeli = parseFloat(row[3] || 0); // Harga Satuan → buy_price
+            const hargaJual = parseFloat(row[2] || 0); // Harga Jual +10% → price
 
             // Skip baris kosong / tidak valid
-            if (!nama || isNaN(jumlah) || isNaN(hargaBeli) || hargaBeli <= 0) continue;
+            // if (!nama || isNaN(jumlah) || isNaN(hargaBeli) || hargaBeli < 0) continue;
             // Skip baris "Total"
-            if (String(row[2]).toLowerCase() === 'total') continue;
+            // if (String(row[6]).toLowerCase() === 'total') continue;
             // Skip duplikat nama
             const namaKey = nama.toLowerCase();
             if (namaSet.has(namaKey)) {
@@ -51,11 +52,11 @@ const importProducts = async () => {
             namaSet.add(namaKey);
 
             allProducts.push({
-                sku      : null,
-                name     : nama,
-                stock    : jumlah,
+                sku: sku,
+                name: nama,
+                stock: jumlah,
                 buy_price: roundPrice(hargaBeli),
-                price    : Math.round(hargaJual), // Harga Jual langsung dari Excel
+                price: Math.round(hargaJual), // Harga Jual langsung dari Excel
             });
             sheetCount++;
         }
@@ -99,6 +100,12 @@ const importProducts = async () => {
         // Insert produk baru dengan buy_price & price
         let insertedCount = 0;
         for (const prod of allProducts) {
+            console.log("sku : ", prod.sku);
+            console.log("name : ", prod.name);
+            console.log("category_id : ", defaultCategoryId);
+            console.log("price : ", prod.price);
+            console.log("buy_price : ", prod.buy_price);
+            console.log("stock : ", prod.stock);
             await client.query(
                 `INSERT INTO product (sku, name, category_id, price, buy_price, stock, created_by)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,

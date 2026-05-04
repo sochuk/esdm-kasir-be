@@ -12,12 +12,13 @@ export const login = async (req, res) => {
     }
 
     // 2. Query user joined with their profile from database
+    // Support login via username OR no_handphone
     const userResult = await pool.query(
       `SELECT ua.id, ua.username, ua.password, ua.type_user, ua.is_active, 
               up.nama, up.unit, up.no_anggota, up.no_rekening, up.points, up.photo_base64, up.no_handphone
        FROM user_account ua
        LEFT JOIN user_profile up ON ua.id = up.id_user_account
-       WHERE ua.username = $1`, 
+       WHERE ua.username = $1 OR up.no_handphone = $1`, 
       [username]
     );
     

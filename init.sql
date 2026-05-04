@@ -52,7 +52,7 @@ ON CONFLICT (name) DO NOTHING;
 -- 4. Create Product Content Table
 CREATE TABLE IF NOT EXISTS product (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    sku VARCHAR(100) UNIQUE NOT NULL,
+    sku VARCHAR(100),
     name VARCHAR(255) NOT NULL,
     category_id UUID REFERENCES category(id) ON DELETE SET NULL,
     price NUMERIC(15,2) DEFAULT 0,

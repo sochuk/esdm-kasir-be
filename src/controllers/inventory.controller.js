@@ -38,7 +38,7 @@ export const createProduct = async (req, res) => {
             `INSERT INTO product (sku, name, category_id, price, buy_price, stock, image_url, is_consignment, consignment_percentage) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
             [
-                sku, name, category_id, 
+                sku || null, name, category_id, 
                 price, 
                 buy_price || 0, 
                 stock, 
@@ -70,7 +70,7 @@ export const updateProduct = async (req, res) => {
              SET sku = $1, name = $2, category_id = $3, price = $4, buy_price = $5, stock = $6, image_url = $7,
                  is_consignment = $8, consignment_percentage = $9, updated_date = CURRENT_TIMESTAMP
              WHERE id = $10 RETURNING *`,
-            [sku, name, category_id, price, buy_price || 0, stock, image_url, is_consignment || false, consignment_percentage || 0, id]
+            [sku || null, name, category_id, price, buy_price || 0, stock, image_url, is_consignment || false, consignment_percentage || 0, id]
         );
         
         if (result.rows.length === 0) {
