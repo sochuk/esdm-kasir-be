@@ -18,7 +18,8 @@ export const login = async (req, res) => {
               up.nama, up.unit, up.no_anggota, up.no_rekening, up.points, up.photo_base64, up.no_handphone
        FROM user_account ua
        LEFT JOIN user_profile up ON ua.id = up.id_user_account
-       WHERE ua.username = $1 OR up.no_handphone = $1`, 
+       WHERE ua.username = $1 
+          OR (up.no_handphone IS NOT NULL AND up.no_handphone = $1)`, 
       [username]
     );
     
